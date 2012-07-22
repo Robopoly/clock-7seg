@@ -6,13 +6,25 @@
 void resetAll(void);
 void setTime(void);
 
-char serialData[7];
-unsigned char time_seconds = 0, time_minutes = 0, time_hours = 0;
+char inputStream[7];
+// store hours, minutes and seconds
+struct time
+{
+  unsigned char hours, minutes, seconds;
+};
+
+// time instance
+time myTime;
 
 void setup()
 {
   // serial connection for time setting
   Serial.begin(9600);
+  
+  // initialize time to 00h00m00s
+  myTime.hours = 0;
+  myTime.minutes = 0;
+  myTime.seconds = 0;
 
   // init i/o pins
   DDRB = 0b11111000;
@@ -47,15 +59,28 @@ void loop()
   // ex: for 23h44m12s enter 234412
   if(Serial.available() > 0)
   {
-    Serial.readBytesUntil(10, serialData, 7);
-
-    time_hours = (serialData[0]-48)*10+serialData[1]-48;
-    time_minutes = (serialData[2]-48)*10+serialData[3]-48;
-    time_seconds = (serialData[4]-48)*10+serialData[5]-48;
-
-    setTime();
+    Serial.readBytesUntil(10, inputStream, 7);
+    unsigned char hours, minutes, seconds;
     
-    Serial.write("You are awesome!\n");
+    hours = 10*(inputStream[0]-48)+inputStream[1]-48;
+    minutes = 10*(inputStream[2]-48)+inputStream[3]-48;
+    seconds = 10*(inputStream[4]-48)+inputStream[5]-48;
+    
+    // test for valid input, needed in case connecting UART programmer sends weird data
+    if(hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59 && seconds >= 0 && seconds <= 59)
+    {
+      myTime.hours = hours;
+      myTime.minutes = minutes;
+      myTime.seconds = seconds;
+      
+      setTime();
+      Serial.write("You are awesome!\n");
+    }
+    else
+    {
+      // report error
+      Serial.write("Error setting time!\n");
+    }
   }
 }
 
@@ -66,19 +91,19 @@ void setTime()
 
   // increment seconds
   unsigned char i;
-  for(i=0; i<time_seconds; i++)
+  for(i = 0; i < myTime.seconds; i++)
   {
     CLK_SEC_PORT |= (1 << CLK_SEC_PIN);
     _delay_us(1);
     CLK_SEC_PORT &= ~(1 << CLK_SEC_PIN);
   }
-  for(i=0; i<time_minutes; i++)
+  for(i = 0; i < myTime.minutes; i++)
   {
     CLK_MIN_PORT |= (1 << CLK_MIN_PIN);
     _delay_us(1);
     CLK_MIN_PORT &= ~(1 << CLK_MIN_PIN);
   }
-  for(i=0; i<time_hours; i++)
+  for(i = 0; i < myTime.hours; i++)
   {
     CLK_HOUR_PORT |= (1 << CLK_HOUR_PIN);
     _delay_us(1);
@@ -89,17 +114,17 @@ void setTime()
 //overflow interrupt vector 
 ISR(TIMER2_OVF_vect)
 {
-  if(time_seconds < 59)
+  if(myTime.seconds < 59)
   {
-    time_seconds++;
+    myTime.seconds++;
     CLK_SEC_PORT |= (1 << CLK_SEC_PIN);
     _delay_us(100);
     CLK_SEC_PORT &= ~(1 << CLK_SEC_PIN);
   }
-  else if(time_minutes < 59)
+  else if(myTime.minutes < 59)
   {
-    time_minutes++;
-    time_seconds = 0;
+    myTime.minutes++;
+    myTime.seconds = 0;
     RST_SEC_PORT |= (1 << RST_SEC_PIN);
     _delay_us(100);
     RST_SEC_PORT &= ~(1 << RST_SEC_PIN);
@@ -110,11 +135,11 @@ ISR(TIMER2_OVF_vect)
     _delay_us(100);
     CLK_MIN_PORT &= ~(1 << CLK_MIN_PIN);
   }
-  else if(time_hours < 23)
+  else if(myTime.hours < 23)
   {
-    time_hours++;
-    time_minutes = 0;
-    time_seconds = 0;
+    myTime.hours++;
+    myTime.minutes = 0;
+    myTime.seconds = 0;
     
     RST_SEC_PORT |= (1 << RST_SEC_PIN);
     _delay_us(100);
@@ -134,9 +159,9 @@ ISR(TIMER2_OVF_vect)
   }
   else
   {
-    time_seconds = 0;
-    time_minutes = 0;
-    time_hours = 0;
+    myTime.seconds = 0;
+    myTime.minutes = 0;
+    myTime.hours = 0;
     resetAll();
   }
 }
